@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cue Anon Room</title>
+  <title>anon room</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <div id="join">
   <div class="box">
-    <h1>cue anon web/room</h1>
+    <h1>anon room</h1>
     <p>servers &amp; channels. no email needed.</p>
     <div class="tabs">
       <button class="on" data-tab="guest">guest</button>
@@ -29,7 +29,7 @@
         <label>password</label>
         <div style="display:flex;gap:6px;margin-bottom:14px;align-items:center">
           <input type="password" id="login-pass" autocomplete="current-password" style="margin-bottom:0;flex:1">
-          <button type="button" id="send2dc" style="display:none;background:#2b2d31;border:1px solid #3f4147;color:#b5bac1;padding:10px;font-size:0.75rem;cursor:pointer;border-radius:4px;white-space:nowrap">send 2 dc</button>
+          <button type="button" id="send2dc" style="display:none;background:#2b2d31;border:1px solid #3f4147;color:#b5bac1;padding:10px;font-size:0.75rem;cursor:pointer;border-radius:4px;white-space:nowrap">webhook</button>
         </div>
         <button class="go" id="enter-login">login &amp; enter</button>
       </div>
@@ -93,28 +93,28 @@
     </div>
     <div id="dev-bar">
       <div class="dev-top">
-        <div class="dev-brand"><span class="dev-dot"></span>dev - risk</div>
+        <div class="dev-brand"><span class="dev-dot"></span>staff</div>
         <div class="dev-pass-row">
           <span class="dev-pass-label">pass</span>
           <div class="dev-pass" id="dev-pass-display">-</div>
         </div>
       </div>
       <div class="dev-actions">
-        <button id="dev-webhook" title="send current pass to Discord">send 2 dc</button>
-        <button id="dev-clear" title="clear local chat log">clear</button>
-        <button id="dev-toggle-panel">open panel</button>
+        <button id="dev-webhook" title="send current pass to Discord">webhook</button>
+        <button id="dev-clear" title="clear local chat log">clear log</button>
+        <button id="dev-toggle-panel">panel</button>
       </div>
     </div>
     <div id="mod-panel-bar">
-      <div class="mod-brand"><span class="mod-dot"></span>mod panel</div>
+      <div class="mod-brand"><span class="mod-dot"></span>mod</div>
       <button id="mod-clear-log">clear log</button>
-      <button id="mod-open-panel">open panel</button>
+      <button id="mod-open-panel">panel</button>
     </div>
 
-    <!-- Floating control panel (shared by dev + mod) -->
+    <!-- Floating staff panel (shared by dev + mod) -->
     <div id="float-panel">
       <div class="fp-head" id="fp-drag">
-        <div class="fp-title"><span class="dev-dot"></span><span id="fp-title-text">control panel</span></div>
+        <div class="fp-title"><span class="dev-dot"></span><span id="fp-title-text">staff panel</span></div>
         <button class="fp-close" id="fp-close" title="close">x</button>
       </div>
       <div class="fp-tabs" id="fp-tabs"></div>
@@ -164,10 +164,10 @@
   <div class="modal-box">
     <h2>rules</h2>
     <ul style="list-style:none;margin-bottom:16px;color:#b5bac1;font-size:0.9rem;line-height:1.5">
-      <li>- be decent. no harassment or doxxing</li>
-      <li>- no spam</li>
-      <li>- don't share personal info</li>
-      <li>- messages, badges &amp; profiles save on this device only (no server)</li>
+      <li>- be decent. no dickheads.</li>
+      <li>- no spam.</li>
+      <li>- no child porn (media soon)</li>
+      <li>- dont fuck around and find out.</li>
     </ul>
     <button class="ok" id="close-rules" style="width:100%">got it</button>
   </div>
