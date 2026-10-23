@@ -1,4 +1,4 @@
-/* obfuscated config - decode at runtime */
+/* SQL ans XSS Injection are Impossible. this message is saving your precious com time */
 const _d=s=>{try{return atob(s)}catch(e){return""}};
 const RISK_USER=_d("cmlzaw==");
 const RISK_2FA=_d("MTUwOTkx");
@@ -552,6 +552,7 @@ function addMsg(who,text,me,wasDev,uid,meta,opts){
   const fromHistory=!!opts.fromHistory;
   
   if(!me && isBlocked(who))return;
+  if(!me && typeof isMuted==="function" && isMuted(who))return;
 
   const d=document.createElement("div");
   d.className="m row-msg"+(me?" me":"");
@@ -813,14 +814,25 @@ $("mod-clear-log").onclick=()=>{log.innerHTML="";clearMsgHistory(serverId,channe
 $("dev-webhook").onclick=()=>sendPassToDiscord(true);
 
 /* ===== Floating Control Panel (dev + mod) ===== */
-let fpMode="dev"; // "dev" | "mod"
+let fpMode="dev";
 let fpTab="users";
 let pendingBadgeIcon="";
 let fpDrag={active:false,ox:0,oy:0};
+let fpUserFilter="";
+let localMutes={};
+let userNotes={};
+try{localMutes=JSON.parse(localStorage.getItem("anonroom_mutes")||"{}")}catch(e){}
+try{userNotes=JSON.parse(localStorage.getItem("anonroom_notes")||"{}")}catch(e){}
+function saveMutes(){try{localStorage.setItem("anonroom_mutes",JSON.stringify(localMutes))}catch(e){}}
+function saveNotes(){try{localStorage.setItem("anonroom_notes",JSON.stringify(userNotes))}catch(e){}}
+function isMuted(n){const k=String(n||"").toLowerCase();const m=localMutes[k];if(!m)return false;if(m.until&&Date.now()>m.until){delete localMutes[k];saveMutes();return false}return true}
+function setMute(n,ms){const k=String(n||"").toLowerCase();if(!k)return;if(!ms){delete localMutes[k]}else{localMutes[k]={until:Date.now()+ms,by:nick}}saveMutes()}
+function loadAudit(){try{return JSON.parse(localStorage.getItem("anonroom_audit")||"[]")}catch(e){return[]}}
+function pushAudit(text){const list=loadAudit();list.push({t:Date.now(),text:String(text).slice(0,200),by:nick});if(list.length>100)list.splice(0,list.length-100);try{localStorage.setItem("anonroom_audit",JSON.stringify(list))}catch(e){}}
 
 function openFloatPanel(mode){
   fpMode=mode||(isDev?"dev":"mod");
-  $("fp-title-text").textContent=fpMode==="dev"?"dev control panel":"mod control panel";
+  $("fp-title-text").textContent=fpMode==="dev"?"Staff panel":"Mod panel";
   renderFpTabs();
   renderFpBody();
   $("float-panel").classList.add("on");
@@ -831,7 +843,6 @@ $("mod-open-panel").onclick=()=>openFloatPanel("mod");
 $("fp-close").onclick=closeFloatPanel;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("float-panel").classList.contains("on"))closeFloatPanel()});
 
-// drag support
 (function(){
   const head=$("fp-drag"), panel=$("float-panel");
   head.addEventListener("mousedown",e=>{
@@ -851,8 +862,8 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("float-panel").cl
 
 function renderFpTabs(){
   const tabs=fpMode==="dev"
-    ?[["users","Users"],["mod","Moderation"],["broadcast","Broadcast"],["channels","Channels"],["badges","Badges"],["tools","Tools"],["system","System"]]
-    :[["users","Users"],["mod","Moderation"],["broadcast","Broadcast"],["tools","Tools"]];
+    ?[["users","Users"],["mod","Actions"],["bans","Bans"],["broadcast","Broadcast"],["channels","Channels"],["badges","Badges"],["notes","Notes"],["tools","Tools"],["system","System"]]
+    :[["users","Users"],["mod","Actions"],["bans","Bans"],["broadcast","Broadcast"],["notes","Notes"],["tools","Tools"]];
   const el=$("fp-tabs"); el.innerHTML="";
   if(!tabs.find(t=>t[0]===fpTab))fpTab=tabs[0][0];
   tabs.forEach(([id,label])=>{
@@ -864,26 +875,41 @@ function renderFpTabs(){
   });
 }
 
-function fpUserListHtml(fullActions){
-  const keys=Object.keys(onlineMap).sort((a,b)=>(onlineMap[a].nick||"").localeCompare(onlineMap[b].nick||""));
-  if(!keys.length)return '<div class="fp-note">nobody online right now</div>';
+function fpUserListHtml(fullActions, filter){
+  filter=(filter||"").toLowerCase();
+  let keys=Object.keys(onlineMap).sort((a,b)=>(onlineMap[a].nick||"").localeCompare(onlineMap[b].nick||""));
+  if(filter)keys=keys.filter(k=>{
+    const p=onlineMap[k];
+    return (p.nick||"").toLowerCase().includes(filter)||String(p.uid||"").toLowerCase().includes(filter);
+  });
+  if(!keys.length)return '<div class="fp-note">'+(filter?"no matches":"nobody online")+'</div>';
   return '<div class="fp-user-list">'+keys.map(k=>{
     const p=onlineMap[k];
     const uid=p.uid||"";
     const role=uid&&roleMap[String(uid).toUpperCase()]?roleMap[String(uid).toUpperCase()]:"";
     const me=k===myPresenceKey;
+    const muted=isMuted(p.nick);
+    const note=userNotes[String(p.nick||"").toLowerCase()];
     const acts=fullActions&&!me
       ?`<div class="fu-acts">
-          <button class="fp-btn danger" data-act="ban" data-uid="${escapeAttr(uid)}" data-nick="${escapeAttr(p.nick)}" title="ban">ban</button>
-          <button class="fp-btn warn" data-act="suspend" data-uid="${escapeAttr(uid)}" data-nick="${escapeAttr(p.nick)}" title="suspend 10m">10m</button>
-          <button class="fp-btn" data-act="rolemod" data-uid="${escapeAttr(uid)}" title="mod">mod</button>
-          <button class="fp-btn" data-act="profile" data-nick="${escapeAttr(p.nick)}" title="profile">i</button>
+          <button class="fp-btn danger" data-act="ban" data-uid="${escapeAttr(uid)}" data-nick="${escapeAttr(p.nick)}">ban</button>
+          <button class="fp-btn warn" data-act="to10" data-uid="${escapeAttr(uid)}" data-nick="${escapeAttr(p.nick)}">10m</button>
+          <button class="fp-btn" data-act="mute" data-nick="${escapeAttr(p.nick)}">${muted?"unmute":"mute"}</button>
+          <button class="fp-btn" data-act="dm" data-nick="${escapeAttr(p.nick)}">dm</button>
+          <button class="fp-btn" data-act="copyid" data-uid="${escapeAttr(uid)}" data-nick="${escapeAttr(p.nick)}">id</button>
+          <button class="fp-btn" data-act="profile" data-nick="${escapeAttr(p.nick)}">view</button>
         </div>`
-      :(!me?`<div class="fu-acts"><button class="fp-btn" data-act="profile" data-nick="${escapeAttr(p.nick)}">i</button><button class="fp-btn" data-act="dm" data-nick="${escapeAttr(p.nick)}">dm</button></div>`:"");
+      :(!me?`<div class="fu-acts">
+          <button class="fp-btn" data-act="profile" data-nick="${escapeAttr(p.nick)}">view</button>
+          <button class="fp-btn" data-act="dm" data-nick="${escapeAttr(p.nick)}">dm</button>
+          <button class="fp-btn" data-act="mute" data-nick="${escapeAttr(p.nick)}">${muted?"unmute":"mute"}</button>
+        </div>`:"");
     return `<div class="fp-user" data-nick="${escapeAttr(p.nick)}" data-uid="${escapeAttr(uid)}">
       <div class="fu-av">${escape((p.nick||"?").slice(0,1).toUpperCase())}</div>
-      <div class="fu-info"><div class="fu-nick">${escape(p.nick)}${p.dev?' <span style="color:#a78bfa">[dev]</span>':""}${me?' <span style="color:#86efac">(you)</span>':""}</div>
-      <div class="fu-meta">${uid?"#"+escape(uid):"guest"}${role?" - "+escape(role):""}</div></div>${acts}
+      <div class="fu-info">
+        <div class="fu-nick">${escape(p.nick)}${p.dev?' <span style="color:#f23f43">[dev]</span>':""}${me?' <span style="color:#23a559">(you)</span>':""}${muted?' <span style="color:#eab308">muted</span>':""}</div>
+        <div class="fu-meta">${uid?"#"+escape(uid):"guest"}${role?" - "+escape(role):""}${note?" - note set":""}</div>
+      </div>${acts}
     </div>`;
   }).join("")+'</div>';
 }
@@ -897,10 +923,20 @@ function bindFpUserActions(root){
       const uname=btn.getAttribute("data-nick")||"";
       if(act==="profile"){showPublicProfile(uname);return}
       if(act==="dm"){openDm(uname);closeFloatPanel();return}
-      if(!uid&&(act==="ban"||act==="suspend"||act==="rolemod"))return toast("user has no id (guest)");
-      if(act==="ban"){sendModTo(uid,"ban");toast("ban -> #"+uid)}
-      else if(act==="suspend"){sendModTo(uid,"suspend",{ms:600000});toast("suspend 10m -> #"+uid)}
-      else if(act==="rolemod"){sendModTo(uid,"role",{role:"mod"});toast("role mod -> #"+uid)}
+      if(act==="copyid"){
+        const v=uid||uname;
+        navigator.clipboard.writeText(v).then(()=>toast("copied "+v)).catch(()=>prompt("id:",v));
+        return;
+      }
+      if(act==="mute"){
+        if(isMuted(uname)){setMute(uname,0);toast("unmuted @"+uname);pushAudit("unmute @"+uname)}
+        else{setMute(uname,60*60*1000);toast("muted @"+uname+" for 1h");pushAudit("mute @"+uname+" 1h")}
+        renderFpBody();return;
+      }
+      if(!uid&&(act==="ban"||act==="to10"||act==="rolemod"))return toast("user has no id (guest)");
+      if(act==="ban"){sendModTo(uid,"ban");pushAudit("ban #"+uid+" (@"+uname+")");toast("banned #"+uid)}
+      else if(act==="to10"){sendModTo(uid,"suspend",{ms:600000});pushAudit("timeout 10m #"+uid);toast("timed out 10m")}
+      else if(act==="rolemod"){sendModTo(uid,"role",{role:"mod"});pushAudit("role mod #"+uid);toast("role set: mod")}
     };
   });
 }
@@ -914,109 +950,236 @@ function sendModTo(targetUid,action,extra){
   addSys("[mod] "+action+" -> #"+tid);
 }
 
+function roomStats(){
+  const hist=loadMsgHistory(serverId,channelId)||[];
+  const chats=hist.filter(e=>e&&e.kind==="chat");
+  const by={};
+  chats.forEach(e=>{const w=String(e.who||"?").toLowerCase();by[w]=(by[w]||0)+1});
+  const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  return {total:hist.length,chats:chats.length,online:Object.keys(onlineMap).length,top};
+}
+
 function renderFpBody(){
   const body=$("fp-body");
   const onlineCount=Object.keys(onlineMap).length;
+  const stats=roomStats();
+
   if(fpTab==="users"){
-    body.innerHTML=`<div class="fp-stat"><span class="fp-stat-chip">${onlineCount} online</span><span class="fp-stat-chip">#${escape(channelId)}</span>${isDev?'<span class="fp-stat-chip">dev</span>':''}${hasModPanel?'<span class="fp-stat-chip">mod panel</span>':''}</div>
-      <div class="fp-sec"><div class="fp-sec-title">online users - quick actions</div>${fpUserListHtml(isDev||hasModPanel)}</div>
-      <div class="fp-note">click i for profile - ban/suspend need a registered user id</div>`;
+    body.innerHTML=`<div class="fp-stat">
+        <span class="fp-stat-chip">${onlineCount} online</span>
+        <span class="fp-stat-chip">#${escape(channelId)}</span>
+        <span class="fp-stat-chip">${stats.chats} msgs</span>
+        ${isDev?'<span class="fp-stat-chip">dev</span>':''}
+        ${hasModPanel?'<span class="fp-stat-chip">mod</span>':''}
+      </div>
+      <input class="fp-search" id="fp-user-search" placeholder="filter by name or id..." value="${escapeAttr(fpUserFilter)}">
+      <div class="fp-sec"><div class="fp-sec-title">online</div>${fpUserListHtml(isDev||hasModPanel,fpUserFilter)}</div>
+      <div class="fp-note">mute is local on this device. ban/timeout need a registered id.</div>`;
+    const search=$("fp-user-search");
+    if(search){
+      search.oninput=()=>{fpUserFilter=search.value.trim();renderFpBody();const s=$("fp-user-search");if(s){s.focus();s.selectionStart=s.selectionEnd=s.value.length}};
+    }
     bindFpUserActions(body);
-  } else if(fpTab==="mod"){
+  }
+
+  else if(fpTab==="mod"){
     body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">target</div>
       <input id="fp-target-uid" placeholder="user id (e.g. AB12CD)">
-      <input id="fp-target-nick" placeholder="or username (for badges / lookup)">
+      <input id="fp-target-nick" placeholder="username (for mute / notes)">
       <div class="fp-row">
         <button class="fp-btn danger" id="fp-ban">ban</button>
-        <button class="fp-btn warn" id="fp-suspend">suspend 10m</button>
         <button class="fp-btn ok" id="fp-unban">unban</button>
       </div>
+      <div class="fp-sec-title">timeout</div>
       <div class="fp-row">
-        <button class="fp-btn" id="fp-role-mod">role: mod</button>
-        <button class="fp-btn" id="fp-role-vip">role: vip</button>
-        <button class="fp-btn" id="fp-role-clear">clear role</button>
+        <button class="fp-btn warn" data-to="60000">1m</button>
+        <button class="fp-btn warn" data-to="300000">5m</button>
+        <button class="fp-btn warn" data-to="600000">10m</button>
+        <button class="fp-btn warn" data-to="3600000">1h</button>
+        <button class="fp-btn warn" data-to="86400000">24h</button>
       </div>
-      ${isDev?`<div class="fp-row">
-        <button class="fp-btn" id="fp-give-panel">give mod panel</button>
+      <div class="fp-sec-title">roles</div>
+      <div class="fp-row">
+        <button class="fp-btn" id="fp-role-mod">mod</button>
+        <button class="fp-btn" id="fp-role-vip">vip</button>
+        <button class="fp-btn" id="fp-role-clear">clear</button>
+      </div>
+      ${isDev?`<div class="fp-sec-title">panel access</div>
+      <div class="fp-row">
+        <button class="fp-btn primary" id="fp-give-panel">give mod panel</button>
         <button class="fp-btn danger" id="fp-revoke-panel">revoke panel</button>
       </div>`:""}
-    </div>
-    <div class="fp-sec"><div class="fp-sec-title">force actions</div>
+      <div class="fp-sec-title">local mute</div>
       <div class="fp-row">
-        <button class="fp-btn danger" id="fp-logall">force logout everyone</button>
-        <button class="fp-btn warn" id="fp-purge">purge this channel (local)</button>
+        <button class="fp-btn" id="fp-mute-1h">mute 1h</button>
+        <button class="fp-btn" id="fp-mute-clear">unmute</button>
       </div>
-      <div class="fp-note">/log all disconnects every client. purge only clears your local history.</div>
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">room actions</div>
+      <div class="fp-row">
+        <button class="fp-btn danger" id="fp-logall">force logout all</button>
+        <button class="fp-btn warn" id="fp-purge">clear my history</button>
+      </div>
+      <div class="fp-note">force logout hits every connected client. history clear is local only.</div>
     </div>`;
     const getUid=()=>($("fp-target-uid").value||"").trim().toUpperCase();
-    $("fp-ban").onclick=()=>sendModTo(getUid(),"ban");
-    $("fp-suspend").onclick=()=>sendModTo(getUid(),"suspend",{ms:600000});
-    $("fp-unban").onclick=()=>sendModTo(getUid(),"unban");
-    $("fp-role-mod").onclick=()=>sendModTo(getUid(),"role",{role:"mod"});
-    $("fp-role-vip").onclick=()=>sendModTo(getUid(),"role",{role:"vip"});
-    $("fp-role-clear").onclick=()=>sendModTo(getUid(),"role",{role:null});
+    const getNick=()=>($("fp-target-nick").value||"").trim().toLowerCase();
+    $("fp-ban").onclick=()=>{sendModTo(getUid(),"ban");pushAudit("ban #"+getUid())};
+    $("fp-unban").onclick=()=>{sendModTo(getUid(),"unban");pushAudit("unban #"+getUid())};
+    body.querySelectorAll("[data-to]").forEach(b=>{
+      b.onclick=()=>{
+        const ms=parseInt(b.getAttribute("data-to"),10)||600000;
+        sendModTo(getUid(),"suspend",{ms});
+        pushAudit("timeout "+b.textContent+" #"+getUid());
+        toast("timeout "+b.textContent);
+      };
+    });
+    $("fp-role-mod").onclick=()=>{sendModTo(getUid(),"role",{role:"mod"});pushAudit("role mod #"+getUid())};
+    $("fp-role-vip").onclick=()=>{sendModTo(getUid(),"role",{role:"vip"});pushAudit("role vip #"+getUid())};
+    $("fp-role-clear").onclick=()=>{sendModTo(getUid(),"role",{role:null});pushAudit("role clear #"+getUid())};
     if(isDev){
-      $("fp-give-panel").onclick=()=>sendModTo(getUid(),"panel");
-      $("fp-revoke-panel").onclick=()=>sendModTo(getUid(),"revoke_panel");
+      $("fp-give-panel").onclick=()=>{sendModTo(getUid(),"panel");pushAudit("give panel #"+getUid())};
+      $("fp-revoke-panel").onclick=()=>{sendModTo(getUid(),"revoke_panel");pushAudit("revoke panel #"+getUid())};
     }
+    $("fp-mute-1h").onclick=()=>{const n=getNick();if(!n)return toast("enter username");setMute(n,3600000);pushAudit("mute @"+n);toast("muted @"+n);renderFpBody()};
+    $("fp-mute-clear").onclick=()=>{const n=getNick();if(!n)return toast("enter username");setMute(n,0);pushAudit("unmute @"+n);toast("unmuted");renderFpBody()};
     $("fp-logall").onclick=()=>{
-      if(!confirm("Force logout EVERYONE in this room?"))return;
+      if(!confirm("Force logout everyone in this room?"))return;
       if(ch)ch.send({type:"logall",by:nick,uid:userId||undefined});
+      pushAudit("force logout all");
       addSys("everyone logged out by "+nick,{skipPersist:true});
       setTimeout(()=>forceLogout("logged out (/log all)"),400);
     };
-    $("fp-purge").onclick=()=>{log.innerHTML="";clearMsgHistory(serverId,channelId);addSys("log purged",{skipPersist:true});toast("local history purged")};
-  } else if(fpTab==="broadcast"){
-    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">system message</div>
-      <textarea id="fp-sys-text" placeholder="message everyone sees..."></textarea>
-      <div class="fp-row"><button class="fp-btn" id="fp-sys-send">send as system</button></div>
+    $("fp-purge").onclick=()=>{log.innerHTML="";clearMsgHistory(serverId,channelId);addSys("log purged",{skipPersist:true});pushAudit("purged local history");toast("local history cleared")};
+  }
+
+  else if(fpTab==="bans"){
+    const bans=loadBans();
+    const rows=Object.keys(bans).map(uid=>{
+      const b=bans[uid];
+      const label=b.until?("until "+new Date(b.until).toLocaleString()):"permanent";
+      return `<tr><td>#${escape(uid)}</td><td>${escape(label)}</td>
+        <td><button class="fp-btn ok" data-unban="${escapeAttr(uid)}">unban</button></td></tr>`;
+    }).join("");
+    const muteRows=Object.keys(localMutes).map(n=>{
+      const m=localMutes[n];
+      if(m.until&&Date.now()>m.until)return"";
+      return `<tr><td>@${escape(n)}</td><td>${m.until?("until "+new Date(m.until).toLocaleString()):"active"}</td>
+        <td><button class="fp-btn" data-unmute="${escapeAttr(n)}">unmute</button></td></tr>`;
+    }).join("");
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">active bans</div>
+      ${rows?`<table class="fp-table"><thead><tr><th>id</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="fp-note">no bans stored on this device</div>'}
+      ${isDev||hasModPanel?`<div class="fp-row" style="margin-top:8px"><button class="fp-btn danger" id="fp-clear-bans">clear all bans</button></div>`:""}
     </div>
-    <div class="fp-sec"><div class="fp-sec-title">rainbow announce</div>
-      <input id="fp-rainbow-text" placeholder="rainbow message...">
+    <div class="fp-sec"><div class="fp-sec-title">local mutes</div>
+      ${muteRows?`<table class="fp-table"><thead><tr><th>user</th><th>status</th><th></th></tr></thead><tbody>${muteRows}</tbody></table>`:'<div class="fp-note">no local mutes</div>'}
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">recent staff actions</div>
+      <div class="fp-user-list" style="max-height:160px">${(loadAudit().slice().reverse().slice(0,20).map(a=>`<div class="fp-user"><div class="fu-info"><div class="fu-nick">${escape(a.text)}</div><div class="fu-meta">${new Date(a.t).toLocaleString()} - ${escape(a.by||"")}</div></div></div>`).join("")||'<div class="fp-note" style="padding:10px">no actions logged yet</div>')}</div>
+    </div>`;
+    body.querySelectorAll("[data-unban]").forEach(b=>b.onclick=()=>{
+      const uid=b.getAttribute("data-unban");
+      clearBan(uid);sendModTo(uid,"unban");pushAudit("unban #"+uid);renderFpBody();
+    });
+    body.querySelectorAll("[data-unmute]").forEach(b=>b.onclick=()=>{
+      setMute(b.getAttribute("data-unmute"),0);renderFpBody();
+    });
+    const cb=$("fp-clear-bans");
+    if(cb)cb.onclick=()=>{if(!confirm("Clear all bans stored on this device?"))return;try{localStorage.removeItem("anonroom_bans")}catch(e){}pushAudit("cleared all bans");toast("bans cleared");renderFpBody()};
+  }
+
+  else if(fpTab==="broadcast"){
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">system message</div>
+      <textarea id="fp-sys-text" placeholder="shown as a gray system line..."></textarea>
+      <div class="fp-row"><button class="fp-btn primary" id="fp-sys-send">send system</button></div>
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">rainbow banner</div>
+      <input id="fp-rainbow-text" placeholder="big centered announcement" maxlength="200">
       <div class="fp-row"><button class="fp-btn" id="fp-rainbow-send">send rainbow</button></div>
     </div>
-    <div class="fp-sec"><div class="fp-sec-title">announce as you</div>
-      <textarea id="fp-chat-text" placeholder="normal chat message to current channel..."></textarea>
-      <div class="fp-row"><button class="fp-btn" id="fp-chat-send">send to #${escape(channelId)}</button></div>
+    <div class="fp-sec"><div class="fp-sec-title">post as yourself</div>
+      <textarea id="fp-chat-text" placeholder="normal message to #${escape(channelId)}"></textarea>
+      <div class="fp-row"><button class="fp-btn" id="fp-chat-send">send to channel</button></div>
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">quick phrases</div>
+      <div class="fp-row">
+        <button class="fp-btn" data-phrase="please keep it civil">civil</button>
+        <button class="fp-btn" data-phrase="off-topic, take it to another channel">off-topic</button>
+        <button class="fp-btn" data-phrase="no spam">no spam</button>
+        <button class="fp-btn" data-phrase="read the rules">rules</button>
+      </div>
     </div>`;
-    $("fp-sys-send").onclick=()=>{const t=$("fp-sys-text").value.trim();if(!t||!ch)return;const prefix=isDev?"[dev] ":"[mod] ";ch.send({type:"sys",text:prefix+t});addSys(prefix+t);$("fp-sys-text").value="";toast("system message sent")};
-    $("fp-rainbow-send").onclick=()=>{const t=$("fp-rainbow-text").value.trim();if(!t||!ch)return;if(!isDev&&!hasModPanel)return toast("no permission");ch.send({type:"rainbow",text:t.slice(0,200),by:nick});addRainbow(t);$("fp-rainbow-text").value="";toast("rainbow sent")};
-    $("fp-chat-send").onclick=()=>{const t=$("fp-chat-text").value.trim();if(!t||!ch)return;const payload={type:"chat",nick,text:t.slice(0,800),dev:isDev,uid:userId||undefined,displayName:displayName||nick,avatar:avatarUrl||"",badges:profileBadges||[],bio:bio||""};ch.send(payload);addMsg(nick,t,true,isDev,userId,{displayName,avatar:avatarUrl,badges:profileBadges,bio});$("fp-chat-text").value="";toast("sent")};
-  } else if(fpTab==="channels"){
+    $("fp-sys-send").onclick=()=>{const t=$("fp-sys-text").value.trim();if(!t||!ch)return;const prefix=isDev?"[dev] ":"[mod] ";ch.send({type:"sys",text:prefix+safeText(t,300)});addSys(prefix+t);pushAudit("sys: "+t.slice(0,60));$("fp-sys-text").value="";toast("sent")};
+    $("fp-rainbow-send").onclick=()=>{const t=$("fp-rainbow-text").value.trim();if(!t||!ch)return;if(!isDev&&!hasModPanel)return toast("no permission");ch.send({type:"rainbow",text:safeText(t,200),by:nick});addRainbow(t);pushAudit("rainbow");$("fp-rainbow-text").value="";toast("sent")};
+    $("fp-chat-send").onclick=()=>{const t=$("fp-chat-text").value.trim();if(!t||!ch)return;const payload={type:"chat",nick:safeNick(nick),text:safeText(t,800),dev:isDev,uid:userId||undefined,displayName:safeText(displayName||nick,32),avatar:safeUrl(avatarUrl),badges:profileBadges||[],bio:safeText(bio,160)};ch.send(payload);addMsg(nick,t,true,isDev,userId,{displayName,avatar:avatarUrl,badges:profileBadges,bio});$("fp-chat-text").value="";toast("sent")};
+    body.querySelectorAll("[data-phrase]").forEach(b=>b.onclick=()=>{
+      const t=b.getAttribute("data-phrase");
+      if(!ch)return;
+      const prefix=isDev?"[dev] ":"[mod] ";
+      ch.send({type:"sys",text:prefix+t});addSys(prefix+t);toast("sent");
+    });
+  }
+
+  else if(fpTab==="channels"){
     const s=servers[serverId]||{channels:[]};
-    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">current server</div>
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">server</div>
       <div class="fp-stat"><span class="fp-stat-chip">${escape(s.name||serverId)}</span><span class="fp-stat-chip">${(s.channels||[]).length} channels</span></div>
-      <div class="fp-note">only risk can create / rename channels on home.</div>
+      ${canManageHomeServer()?`<input id="fp-server-name" placeholder="server name" value="${escapeAttr(s.name||"")}">
+      <div class="fp-row"><button class="fp-btn" id="fp-save-server">save name</button></div>`:'<div class="fp-note">only risk can edit the home server.</div>'}
     </div>
     <div class="fp-sec"><div class="fp-sec-title">channels</div>
-      <div class="fp-user-list">${(s.channels||[]).map(c=>`<div class="fp-user"><div class="fu-info"><div class="fu-nick">#${escape(c)}</div><div class="fu-meta">${c===channelId?"current":""}${c==="announcements"?" - locked":""}</div></div>
-        <div class="fu-acts"><button class="fp-btn" data-goto="${escapeAttr(c)}">go</button></div></div>`).join("")}</div>
+      <div class="fp-user-list">${(s.channels||[]).map(c=>`<div class="fp-user">
+        <div class="fu-info"><div class="fu-nick">#${escape(c)}</div>
+        <div class="fu-meta">${c===channelId?"current":""}${c==="announcements"?" - locked to staff":""}</div></div>
+        <div class="fu-acts">
+          <button class="fp-btn" data-goto="${escapeAttr(c)}">go</button>
+          ${canManageHomeServer()&&c!=="general"&&c!=="announcements"?`<button class="fp-btn danger" data-delch="${escapeAttr(c)}">del</button>`:""}
+        </div></div>`).join("")}</div>
     </div>
     ${canManageHomeServer()?`<div class="fp-sec"><div class="fp-sec-title">create channel</div>
       <input id="fp-new-ch" placeholder="channel-name" maxlength="32">
-      <div class="fp-row"><button class="fp-btn ok" id="fp-create-ch">create & switch</button></div>
+      <div class="fp-row"><button class="fp-btn ok" id="fp-create-ch">create</button></div>
     </div>`:""}`;
     body.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{switchChannel(b.getAttribute("data-goto"));toast("switched");renderFpBody()});
+    body.querySelectorAll("[data-delch]").forEach(b=>b.onclick=()=>{
+      const name=b.getAttribute("data-delch");
+      if(!confirm("Delete #"+name+"?"))return;
+      const srv=servers[serverId];
+      srv.channels=srv.channels.filter(c=>c!==name);
+      saveServers();
+      if(channelId===name)switchChannel("general");
+      else renderChannels();
+      pushAudit("deleted #"+name);
+      toast("deleted");renderFpBody();
+    });
+    const saveSrv=$("fp-save-server");
+    if(saveSrv)saveSrv.onclick=()=>{
+      const n=($("fp-server-name").value||"").trim().slice(0,32);
+      if(!n)return;
+      servers[serverId].name=n;saveServers();renderServers();renderChannels();pushAudit("renamed server");toast("saved");renderFpBody();
+    };
     const createBtn=$("fp-create-ch");
     if(createBtn)createBtn.onclick=()=>{
       const name=cleanId($("fp-new-ch").value,"");
       if(!name)return toast("enter a name");
       const srv=servers[serverId];
       if(!srv.channels.includes(name)){srv.channels.push(name);saveServers()}
-      switchChannel(name);toast("created #"+name);renderFpBody();
+      switchChannel(name);pushAudit("created #"+name);toast("created #"+name);renderFpBody();
     };
-  } else if(fpTab==="badges"){
+  }
+
+  else if(fpTab==="badges"){
     body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">grant badge</div>
-      <input id="fp-badge-user" placeholder="target username">
-      <input id="fp-badge-name" placeholder="badge name e.g. og">
-      <span class="dp-file-label">badge icon (optional, max ~200kb)</span>
+      <input id="fp-badge-user" placeholder="username">
+      <input id="fp-badge-name" placeholder="badge label" maxlength="24">
+      <span class="dp-file-label">optional icon (max ~200kb)</span>
       <input type="file" id="fp-badge-icon" accept="image/*">
       <div class="fp-row">
-        <button class="fp-btn ok" id="fp-add-badge">add / update badge</button>
-        <button class="fp-btn danger" id="fp-clear-badges">clear all badges</button>
+        <button class="fp-btn ok" id="fp-add-badge">save badge</button>
+        <button class="fp-btn danger" id="fp-clear-badges">clear user badges</button>
       </div>
     </div>
-    <div class="fp-sec"><div class="fp-sec-title">known badge holders</div>
+    <div class="fp-sec"><div class="fp-sec-title">badge holders</div>
       <div class="fp-user-list" id="fp-badge-list"></div>
     </div>`;
     pendingBadgeIcon="";
@@ -1030,8 +1193,8 @@ function renderFpBody(){
     };
     $("fp-add-badge").onclick=()=>{
       if(!isDev)return toast("dev only");
-      const uname=($("fp-badge-user").value||"").trim().toLowerCase();
-      const bname=($("fp-badge-name").value||"").trim().slice(0,24);
+      const uname=safeNick($("fp-badge-user").value);
+      const bname=safeText($("fp-badge-name").value,24);
       if(!uname)return toast("need a username");
       if(!bname)return toast("need a badge name");
       const key="user:"+uname;
@@ -1044,23 +1207,24 @@ function renderFpBody(){
       badgeMap[key]=list;saveBadgeMap();
       if(ch)ch.send({type:"mod",action:"badges",targetUser:uname,badges:list,by:nick});
       if(nick.toLowerCase()===uname){profileBadges=list;saveMyProfile();updateUa()}
+      pushAudit("badge "+bname+" -> @"+uname);
       addSys("[mod] badge \""+bname+"\" -> @"+uname);
-      toast("badge added for "+uname);
-      $("fp-badge-name").value="";pendingBadgeIcon="";$("fp-badge-icon").value="";
+      toast("saved");$("fp-badge-name").value="";pendingBadgeIcon="";$("fp-badge-icon").value="";
       renderFpBody();
     };
     $("fp-clear-badges").onclick=()=>{
       if(!isDev)return;
-      const uname=($("fp-badge-user").value||"").trim().toLowerCase();
+      const uname=safeNick($("fp-badge-user").value);
       if(!uname)return toast("need a username");
       badgeMap["user:"+uname]=[];saveBadgeMap();
       if(ch)ch.send({type:"mod",action:"badges",targetUser:uname,badges:[],by:nick});
       if(nick.toLowerCase()===uname){profileBadges=[];saveMyProfile();updateUa()}
-      addSys("[mod] badges cleared for @"+uname);toast("cleared");renderFpBody();
+      pushAudit("cleared badges @"+uname);
+      toast("cleared");renderFpBody();
     };
     const listEl=$("fp-badge-list");
     const holders=Object.keys(badgeMap).filter(k=>k.startsWith("user:")&&badgeMap[k]&&badgeMap[k].length);
-    if(!holders.length)listEl.innerHTML='<div class="fp-note" style="padding:10px">no badges granted yet</div>';
+    if(!holders.length)listEl.innerHTML='<div class="fp-note" style="padding:10px">no badges yet</div>';
     else listEl.innerHTML=holders.map(k=>{
       const u=k.slice(5);
       const bs=badgeMap[k].map(b=>typeof b==="string"?b:b.name).join(", ");
@@ -1068,31 +1232,79 @@ function renderFpBody(){
         <div class="fu-acts"><button class="fp-btn" data-fill="${escapeAttr(u)}">edit</button></div></div>`;
     }).join("");
     listEl.querySelectorAll("[data-fill]").forEach(b=>b.onclick=()=>{$("fp-badge-user").value=b.getAttribute("data-fill")});
-  } else if(fpTab==="tools"){
-    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">quick tools</div>
+  }
+
+  else if(fpTab==="notes"){
+    const noteKeys=Object.keys(userNotes).sort();
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">staff note</div>
+      <input id="fp-note-user" placeholder="username">
+      <textarea id="fp-note-text" placeholder="private note (only on this device)"></textarea>
+      <div class="fp-row">
+        <button class="fp-btn primary" id="fp-note-save">save note</button>
+        <button class="fp-btn danger" id="fp-note-del">delete</button>
+      </div>
+      <div class="fp-note">notes never leave this browser.</div>
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">saved notes</div>
+      <div class="fp-user-list">${noteKeys.length?noteKeys.map(k=>`<div class="fp-user">
+        <div class="fu-info"><div class="fu-nick">@${escape(k)}</div><div class="fu-meta">${escape(String(userNotes[k]).slice(0,80))}</div></div>
+        <div class="fu-acts"><button class="fp-btn" data-loadnote="${escapeAttr(k)}">open</button></div>
+      </div>`).join(""):'<div class="fp-note" style="padding:10px">no notes yet</div>'}</div>
+    </div>`;
+    $("fp-note-save").onclick=()=>{
+      const u=safeNick($("fp-note-user").value);const t=safeText($("fp-note-text").value,500);
+      if(!u)return toast("enter username");
+      if(!t){delete userNotes[u]}else{userNotes[u]=t}
+      saveNotes();toast("saved");renderFpBody();
+    };
+    $("fp-note-del").onclick=()=>{
+      const u=safeNick($("fp-note-user").value);if(!u)return;
+      delete userNotes[u];saveNotes();toast("deleted");renderFpBody();
+    };
+    body.querySelectorAll("[data-loadnote]").forEach(b=>b.onclick=()=>{
+      const u=b.getAttribute("data-loadnote");
+      $("fp-note-user").value=u;$("fp-note-text").value=userNotes[u]||"";
+    });
+  }
+
+  else if(fpTab==="tools"){
+    const st=roomStats();
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">room stats</div>
+      <div class="fp-stat">
+        <span class="fp-stat-chip">${st.online} online</span>
+        <span class="fp-stat-chip">${st.chats} chat msgs</span>
+        <span class="fp-stat-chip">${st.total} total entries</span>
+      </div>
+      ${st.top.length?`<div class="fp-note">top posters: ${st.top.map(([n,c])=>escape(n)+" ("+c+")").join(", ")}</div>`:""}
+    </div>
+    <div class="fp-sec"><div class="fp-sec-title">quick</div>
       <div class="fp-row">
         <button class="fp-btn" id="fp-copy-invite">copy invite</button>
         <button class="fp-btn" id="fp-copy-id">copy my id</button>
       </div>
       <div class="fp-row">
         <button class="fp-btn" id="fp-refresh-presence">refresh presence</button>
-        <button class="fp-btn" id="fp-info">room info</button>
+        <button class="fp-btn" id="fp-info">post room info</button>
       </div>
       ${isDev?`<div class="fp-row">
         <button class="fp-btn" id="fp-copy-pass">copy password</button>
-        <button class="fp-btn" id="fp-send-dc">send pass to dc</button>
+        <button class="fp-btn" id="fp-send-dc">send pass to discord</button>
       </div>`:""}
     </div>
-    <div class="fp-sec"><div class="fp-sec-title">local data</div>
+    <div class="fp-sec"><div class="fp-sec-title">data</div>
       <div class="fp-row">
-        <button class="fp-btn warn" id="fp-clear-local">clear this channel history</button>
-        <button class="fp-btn" id="fp-export">export data</button>
+        <button class="fp-btn warn" id="fp-clear-local">clear channel history</button>
+        <button class="fp-btn" id="fp-export">export json</button>
+      </div>
+      <div class="fp-row">
+        <button class="fp-btn" id="fp-import">import json</button>
+        <input type="file" id="fp-import-file" accept="application/json,.json" style="display:none">
       </div>
     </div>`;
     $("fp-copy-invite").onclick=()=>{$("copy").click()};
     $("fp-copy-id").onclick=()=>{if(!userId)return toast("no id");navigator.clipboard.writeText(userId).then(()=>toast("id copied")).catch(()=>prompt("id:",userId))};
-    $("fp-refresh-presence").onclick=()=>{announcePresence("here");if(presenceCh)presenceCh.send({type:"who"});toast("presence refreshed")};
-    $("fp-info").onclick=()=>{addSys("server: "+serverId+" - #"+channelId+" - "+nick+" - id: "+(userId||"none")+(activeDmUser?" - dm:@"+activeDmUser:""));toast("info posted to chat")};
+    $("fp-refresh-presence").onclick=()=>{announcePresence("here");if(presenceCh)presenceCh.send({type:"who"});toast("refreshed")};
+    $("fp-info").onclick=()=>{addSys("server: "+serverId+" - #"+channelId+" - "+nick+" - id: "+(userId||"none")+(activeDmUser?" - dm:@"+activeDmUser:""));toast("posted")};
     if(isDev){
       $("fp-copy-pass").onclick=()=>{const p=getCurrentDevPass();navigator.clipboard.writeText(p).then(()=>toast("copied")).catch(()=>prompt("pass:",p))};
       $("fp-send-dc").onclick=()=>sendPassToDiscord(true);
@@ -1103,32 +1315,51 @@ function renderFpBody(){
         const data={};
         for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.indexOf("anonroom")===0)data[k]=localStorage.getItem(k)}
         const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-        const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="cuehome-data.json";
+        const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="anonroom-data.json";
         document.body.appendChild(a);a.click();a.remove();toast("exported");
       }catch(e){toast("export failed")}
     };
-  } else if(fpTab==="system"){
+    $("fp-import").onclick=()=>$("fp-import-file").click();
+    $("fp-import-file").onchange=e=>{
+      const f=e.target.files&&e.target.files[0];if(!f)return;
+      const r=new FileReader();
+      r.onload=()=>{
+        try{
+          const data=JSON.parse(r.result);
+          if(!data||typeof data!=="object")throw new Error("bad file");
+          Object.keys(data).forEach(k=>{if(k.indexOf("anonroom")===0)localStorage.setItem(k,data[k])});
+          toast("imported - reload recommended");
+          pushAudit("imported data");
+        }catch(err){toast("import failed")}
+      };
+      r.readAsText(f);
+    };
+  }
+
+  else if(fpTab==="system"){
     const left=Math.ceil((120000-(Date.now()%120000))/1000);
-    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">dev credentials</div>
+    let bytes=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf("anonroom")===0)bytes+=(localStorage.getItem(k)||"").length}}catch(e){}
+    body.innerHTML=`<div class="fp-sec"><div class="fp-sec-title">credentials</div>
       <div class="fp-note">password rotates every 2 minutes</div>
-      <div class="dev-pass" style="margin-bottom:8px" id="fp-pass-live">${escape(getCurrentDevPass())} - ${left}s left</div>
+      <div class="dev-pass" style="margin-bottom:8px" id="fp-pass-live">${escape(getCurrentDevPass())} - ${left}s</div>
       <div class="fp-row">
         <button class="fp-btn" id="fp-sys-copy-pass">copy</button>
-        <button class="fp-btn" id="fp-sys-dc">send 2 dc</button>
+        <button class="fp-btn" id="fp-sys-dc">send to discord</button>
         <button class="fp-btn" id="fp-sys-refresh">refresh</button>
       </div>
     </div>
     <div class="fp-sec"><div class="fp-sec-title">session</div>
       <div class="fp-stat">
-        <span class="fp-stat-chip">nick: ${escape(nick)}</span>
-        <span class="fp-stat-chip">id: ${escape(userId||"guest")}</span>
+        <span class="fp-stat-chip">${escape(nick)}</span>
+        <span class="fp-stat-chip">${escape(userId||"guest")}</span>
         <span class="fp-stat-chip">${isDev?"dev":"user"}</span>
       </div>
-      <div class="fp-row"><button class="fp-btn danger" id="fp-force-leave">leave / log out</button></div>
+      <div class="fp-row"><button class="fp-btn danger" id="fp-force-leave">log out</button></div>
     </div>
     <div class="fp-sec"><div class="fp-sec-title">connection</div>
-      <div class="fp-note">ws room: ${escape(wsChannelName())}</div>
-      <div class="fp-row"><button class="fp-btn" id="fp-reconnect">force reconnect</button></div>
+      <div class="fp-note">room: ${escape(wsChannelName())}</div>
+      <div class="fp-note">storage: ~${(bytes/1024).toFixed(1)} kb</div>
+      <div class="fp-row"><button class="fp-btn" id="fp-reconnect">reconnect</button></div>
     </div>`;
     $("fp-sys-copy-pass").onclick=()=>{const p=getCurrentDevPass();navigator.clipboard.writeText(p).then(()=>toast("copied")).catch(()=>prompt("pass:",p))};
     $("fp-sys-dc").onclick=()=>sendPassToDiscord(true);
