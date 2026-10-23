@@ -1,1 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>anon room</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="join">
+  <div class="box">
+    <h1>anon room</h1>
+    <p>servers &amp; channels. no email needed.</p>
+    <div class="tabs">
+      <button class="on" data-tab="guest">guest</button>
+      <button data-tab="login">login</button>
+      <button data-tab="signup">signup</button>
+    </div>
+    <div class="tab-panel on" id="tab-guest">
+      <label>nickname</label>
+      <input type="text" id="guest-nick" maxlength="20" autocomplete="off">
+      <button class="go" id="enter-guest">enter as guest</button>
+    </div>
+    <div class="tab-panel" id="tab-login">
+      <div class="err" id="login-err"></div>
+      <div id="login-form">
+        <label>username</label>
+        <input type="text" id="login-user" maxlength="24" autocomplete="username">
+        <label>password</label>
+        <div style="display:flex;gap:6px;margin-bottom:14px;align-items:center">
+          <input type="password" id="login-pass" autocomplete="current-password" style="margin-bottom:0;flex:1">
+          <button type="button" id="send2dc" style="display:none;background:#2b2d31;border:1px solid #3f4147;color:#b5bac1;padding:10px;font-size:0.75rem;cursor:pointer;border-radius:4px;white-space:nowrap">send 2 dc</button>
+        </div>
+        <button class="go" id="enter-login">login &amp; enter</button>
+      </div>
+      <div id="twofa-step">
+        <p style="color:#949ba4;font-size:0.85rem;margin-bottom:12px">2fa required</p>
+        <label>2fa code</label>
+        <input type="text" id="twofa-code" maxlength="8" inputmode="numeric">
+        <button class="go" id="enter-twofa">verify &amp; enter</button>
+      </div>
+      <div id="unlock-step">
+        <p style="color:#949ba4;font-size:0.85rem;margin-bottom:12px">access key required</p>
+        <label>access key</label>
+        <input type="text" id="unlock-code" autocomplete="off">
+        <button class="go" id="enter-unlock">unlock device</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-signup">
+      <div class="err" id="signup-err"></div>
+      <label>username</label>
+      <input type="text" id="signup-user" maxlength="24" autocomplete="username">
+      <p class="hint">letters, numbers, _ only</p>
+      <label>password</label>
+      <input type="password" id="signup-pass" autocomplete="new-password">
+      <button class="go" id="enter-signup">create account &amp; enter</button>
+    </div>
+  </div>
+</div>
 
+<div id="bg-layer"></div>
+
+<div id="app">
+  <div id="servers"></div>
+  <div id="sidebar">
+    <div class="server-head">
+      <span id="server-name" style="cursor:pointer" title="server settings">Home</span>
+      <button id="btn-add-channel" title="add channel">+</button>
+    </div>
+    <div id="channel-list"></div>
+    <div id="user-area" title="account settings">
+      <div class="avatar" id="ua-avatar">?</div>
+      <div class="uinfo">
+        <div class="uname" id="ua-name">â</div>
+        <div class="ustatus" id="ua-status">offline</div>
+      </div>
+      <button id="copy-id-btn" style="display:none" onclick="event.stopPropagation()">id</button>
+      <button id="leave" onclick="event.stopPropagation()">leave</button>
+    </div>
+  </div>
+  <div id="main">
+    <div id="main-head">
+      <div class="ch-title">
+        <button id="btn-toggle-sidebar" style="display:none;background:none;border:none;color:#b5bac1;cursor:pointer;font-size:1.1rem;padding:0 6px 0 0">â°</button>
+        <span class="hash" id="ch-prefix">#</span>
+        <span id="channel-title">general</span>
+      </div>
+      <div class="actions">
+        <button id="online-btn">members</button>
+        <button id="rules-btn">rules</button>
+        <button id="copy">invite</button>
+      </div>
+    </div>
+    <div id="dev-bar">
+      <div class="dev-top">
+        <div class="dev-brand"><span class="dev-dot"></span>dev Â· risk</div>
+        <div class="dev-pass-row">
+          <span class="dev-pass-label">pass</span>
+          <div class="dev-pass" id="dev-pass-display">â</div>
+        </div>
+      </div>
+      <div class="dev-actions">
+        <button id="dev-webhook" title="send current pass to Discord">send 2 dc</button>
+        <button id="dev-clear" title="clear local chat log">clear</button>
+        <button id="dev-toggle-panel">open panel</button>
+      </div>
+    </div>
+    <div id="mod-panel-bar">
+      <div class="mod-brand"><span class="mod-dot"></span>mod panel</div>
+      <button id="mod-clear-log">clear log</button>
+      <button id="mod-open-panel">open panel</button>
+    </div>
+
+    <!-- Floating control panel (shared by dev + mod) -->
+    <div id="float-panel">
+      <div class="fp-head" id="fp-drag">
+        <div class="fp-title"><span class="dev-dot"></span><span id="fp-title-text">control panel</span></div>
+        <button class="fp-close" id="fp-close" title="close">&times;</button>
+      </div>
+      <div class="fp-tabs" id="fp-tabs"></div>
+      <div class="fp-body" id="fp-body"></div>
+    </div>
+    <div id="log"></div>
+    <div id="composer">
+      <div id="composer-inner">
+        <textarea id="msg" rows="1" placeholder="Message #general" disabled></textarea>
+        <button id="send" disabled>send</button>
+      </div>
+    </div>
+  </div>
+  <div id="members">
+    <div class="mh">online â <span id="online-count">0</span></div>
+    <div id="online-list"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal-channel">
+  <div class="modal-box">
+    <h2>create channel</h2>
+    <label>channel name</label>
+    <input type="text" id="modal-channel-name" maxlength="32" placeholder="new-channel">
+    <div class="row-btns"><button class="cancel" id="modal-channel-cancel">cancel</button><button class="ok" id="modal-channel-ok">create</button></div>
+  </div>
+</div>
+<div class="modal" id="modal-edit-channel">
+  <div class="modal-box">
+    <h2>edit channel</h2>
+    <label>channel name</label>
+    <input type="text" id="modal-edit-channel-name" maxlength="32">
+    <div class="row-btns"><button class="cancel" id="modal-edit-channel-cancel">cancel</button><button class="ok" id="modal-edit-channel-ok">save</button></div>
+  </div>
+</div>
+<div class="modal" id="modal-edit-server">
+  <div class="modal-box">
+    <h2>edit server settings</h2>
+    <label>server name</label>
+    <input type="text" id="modal-edit-server-name" maxlength="32">
+    <label>icon url</label>
+    <input type="text" id="modal-edit-server-icon" placeholder="https://... or leave blank">
+    <div class="row-btns"><button class="cancel" id="modal-edit-server-cancel">cancel</button><button class="ok" id="modal-edit-server-ok">save</button></div>
+  </div>
+</div>
+<div class="modal" id="rules-panel">
+  <div class="modal-box">
+    <h2>rules</h2>
+    <ul style="list-style:none;margin-bottom:16px;color:#b5bac1;font-size:0.9rem;line-height:1.5">
+      <li>â be decent. no harassment or doxxing</li>
+      <li>â no spam</li>
+      <li>â donât share personal info</li>
+      <li>â messages, badges &amp; profiles save on this device only (no server)</li>
+    </ul>
+    <button class="ok" id="close-rules" style="width:100%">got it</button>
+  </div>
+</div>
+
+<div class="modal" id="settings-modal">
+  <div class="settings-wrap">
+    <div class="settings-nav">
+      <div class="sn-user" id="sn-user" title="account info">
+        <div class="avatar" id="sn-avatar">?</div>
+        <div class="sn-user-txt">
+          <div class="sn-name" id="sn-name">â</div>
+          <div class="sn-sub">Edit Profiles &#9998;</div>
+        </div>
+      </div>
+      <div class="sn-search"><input type="text" id="sn-search" placeholder="Search" autocomplete="off"></div>
+      <nav id="sn-nav"></nav>
+    </div>
+    <div class="settings-content">
+      <div class="sc-inner" id="sc-inner"></div>
+    </div>
+    <button id="settings-close" title="close (esc)">&times;<span class="esc-tag">ESC</span></button>
+  </div>
+</div>
+
+<div class="modal" id="pub-profile">
+  <div class="modal-box" style="max-width:340px">
+    <div class="avatar-preview" id="pub-avatar">?</div>
+    <div class="pub-name" id="pub-name">â</div>
+    <div class="pub-user" id="pub-user">@â</div>
+    <div class="pub-badges" id="pub-badges"></div>
+    <div class="pub-bio" id="pub-bio">no bio</div>
+    <div class="pub-actions" id="pub-actions">
+      <button class="btn-dm" id="pub-btn-dm">Message</button>
+      <button class="btn-block" id="pub-btn-block">Block</button>
+    </div>
+    <button class="ok" id="pub-close" style="width:100%">close</button>
+  </div>
+</div>
+
+
+<audio id="bg-audio" loop controls></audio>
+<iframe id="spotify-embed" src="" width="300" height="152" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="spotify"></iframe>
+<div class="toast" id="toast"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
